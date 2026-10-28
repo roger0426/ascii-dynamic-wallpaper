@@ -19,7 +19,8 @@
  * "dark") tells the chat box which way to style itself; stats.data holds the latest system
  * readings (CPU, memory, GPU) when a host sends them.
  *
- * Common URL params: scene, fps (default 24), chat (full | glass | off). A host that sits behind other
+ * Common URL params: scene, fps (default 24), chat (full | glass | off), menu (0 hides the
+ * scene menu). A host that sits behind other
  * windows can relay the pointer through window.wallpaperInput(x, y, active, clicked), and
  * system readings through window.wallpaperStats(data) (see wallpaper.py's Stats).
  */
@@ -97,7 +98,8 @@
       if (scene.pointerMove) scene.pointerMove(x, y, moved);
     }
 
-    function click(x, y) {
+    function click(x, y, relayedClick) {
+      if (relayedClick && Wallpaper.menu && Wallpaper.menu.click(x, y)) return;
       if (scene.click) scene.click(x, y);
     }
 
@@ -105,16 +107,22 @@
     let relayed = false;
     window.addEventListener("pointermove", (e) => relayed || movePointer(e.clientX, e.clientY), { passive: true });
     document.documentElement.addEventListener("pointerleave", () => relayed || (pointer.active = false));
-    window.addEventListener("pointerdown", (e) => relayed || click(e.clientX, e.clientY));
+    window.addEventListener("pointerdown", (e) => {
+      // Clicks on the scene menu are the menu's; one that closes the menu goes no further.
+      const menu = document.getElementById("menu");
+      if (relayed || (menu && (menu.contains(e.target) || menu.classList.contains("open")))) return;
+      click(e.clientX, e.clientY);
+    });
 
     window.wallpaperInput = (x, y, active, clicked) => {
       relayed = true;
+      if (Wallpaper.menu) Wallpaper.menu.hover(active ? x : null, y);
       if (!active) {
         pointer.active = false;
         return;
       }
       movePointer(x, y);
-      if (clicked) click(x, y);
+      if (clicked) click(x, y, true);
     };
 
     window.addEventListener("resize", resize);

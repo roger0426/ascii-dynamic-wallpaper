@@ -52,6 +52,10 @@ The system monitor only works with the Linux launcher.
 
 To try a scene in a browser, open `index.html?scene=delta`.
 
+### Scene menu
+
+Click `≡` in the bottom-right corner to switch scenes (and options such as ocean's view and animals). With `wallpaper.py`, each monitor remembers what you last picked and starts on it next time, unless you pass `--scene`. Add `?menu=0` to hide the button.
+
 ## Good to know
 
 - Your desktop icons stay visible and clickable on top of the wallpaper.
@@ -60,7 +64,7 @@ To try a scene in a browser, open `index.html?scene=delta`.
 
 ## Adding your own scene
 
-Create `scenes/<name>.js`, then run it with `./wallpaper.py --scene <name>`:
+Create `scenes/<name>.js`, then run it with `./wallpaper.py --scene <name>`. To list it in the scene menu, add it to `SCENES` in `core/menu.js`.
 
 ```js
 Wallpaper.scene("name", ({ grid }) => ({
@@ -79,5 +83,6 @@ Wallpaper.scene("name", ({ grid }) => ({
 |------|--------------|
 | `grid.js` | The character grid |
 | `shapes.js` | Shape helpers |
+| `menu.js` | The scene menu (bottom-right) |
 | `solid.js` | Small 3D bodies drawn as ASCII (z-buffer, rims, spine chains); used by ocean and tank |
 | `app.js` | The frame loop and mouse input |

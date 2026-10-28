@@ -22,6 +22,9 @@ prompt in Claude or ChatGPT in the default browser.
     ./wallpaper.py --no-chat           # just the pond
     ./wallpaper.py --window            # ordinary window, for trying it out
     ./wallpaper.py --install           # start automatically at login
+
+The page's scene menu (bottom-right) switches scenes in place; each monitor
+remembers its pick (in settings.json) for next time unless --scene is given.
 """
 import argparse
 import ctypes
@@ -61,6 +64,8 @@ SCENES = sorted(p.stem for p in (HERE / "scenes").glob("*.js"))
 CLOCK_THEMED = {"koi", "ocean"}
 # Scenes without a chat box (they return chat: false).
 NO_CHAT = {"delta", "ocean", "tank", "fireflies"}
+# What the page's scene menu sets (core/menu.js); remembered per monitor.
+MENU_KEYS = {"scene", "view", "species"}
 
 
 class XPointer:
@@ -328,8 +333,21 @@ class Stats:
         }
 
 
-def make_view(uri):
-    view = WebKit2.WebView()
+def make_view(uri, on_message=None):
+    """A WebView on uri. on_message(dict) gets what the page's scene menu posts
+    (window.webkit.messageHandlers.wallpaper): the query of the scene it switches to."""
+    manager = WebKit2.UserContentManager()
+    if on_message:
+        def received(_manager, result):
+            value = result.get_js_value() if hasattr(result, "get_js_value") else result
+            try:
+                on_message(json.loads(value.to_string()))
+            except ValueError:
+                pass
+
+        manager.connect("script-message-received::wallpaper", received)
+        manager.register_script_message_handler("wallpaper")
+    view = WebKit2.WebView.new_with_user_content_manager(manager)
     view.get_settings().set_allow_file_access_from_file_urls(True)
     view.load_uri(uri)
     return view
@@ -345,10 +363,10 @@ def run_js(view, script):
 class Pond:
     """One desktop-type window covering a monitor."""
 
-    def __init__(self, monitor, uri):
+    def __init__(self, monitor, uri, on_message=None):
         self.geometry = monitor.get_geometry()
         self.scale = monitor.get_scale_factor()
-        self.view = make_view(uri)
+        self.view = make_view(uri, on_message)
         self.sent = None
 
         g = self.geometry
@@ -508,10 +526,20 @@ class ChatOverlay:
 
         win.set_size_request(CHAT_W, CHAT_H)
         win.set_resizable(False)
-        x, y = g.x + (g.width - CHAT_W) // 2, g.y + (g.height - CHAT_H) // 2
+        self.position = x, y = g.x + (g.width - CHAT_W) // 2, g.y + (g.height - CHAT_H) // 2
         win.move(x, y)
         win.show_all()
         win.move(x, y)
+
+    def set_scene(self, scene, visible):
+        """Follow the scene menu: hide for scenes without a chat box, re-theme for the rest."""
+        self.clock_theme = scene in CLOCK_THEMED
+        self.update_theme()
+        if not visible:
+            self.win.hide()
+        elif not self.win.get_visible():
+            self.win.show_all()
+            self.win.move(*self.position)
 
     @staticmethod
     def on_draw(_widget, cr):
@@ -594,7 +622,10 @@ def save_settings(values):
 
 
 def install(args):
-    flags = f"--scene {','.join(args.scene)} --koi {args.koi} --pads {args.pads} --fps {args.fps} --ai {args.ai}"
+    # Without --scene, each monitor starts on what was last picked from the scene menu.
+    flags = f"--koi {args.koi} --pads {args.pads} --fps {args.fps} --ai {args.ai}"
+    if args.scene:
+        flags = f"--scene {','.join(args.scene)} " + flags
     if args.no_chat:
         flags += " --no-chat"
     if args.monitor is not None:
@@ -620,8 +651,9 @@ def main():
             raise argparse.ArgumentTypeError(f"choose from: {', '.join(SCENES)}")
         return names
 
-    parser.add_argument("--scene", type=scene_list, default=["koi"],
-                        help=f"scene, or a comma list (one per monitor): {', '.join(SCENES)} (default koi)")
+    parser.add_argument("--scene", type=scene_list,
+                        help=f"scene, or a comma list (one per monitor): {', '.join(SCENES)} "
+                        "(default: the last one picked from the scene menu, else koi)")
     parser.add_argument("--koi", type=int, default=7, help="number of koi (default 7)")
     parser.add_argument("--pads", type=int, default=5, help="number of lily pads (default 5)")
     parser.add_argument("--view", choices=["top", "side"], help="ocean: look down from above or through the water")
@@ -650,14 +682,20 @@ def main():
     if args.species:
         query["species"] = args.species
 
-    def page(scene, chat):
+    # What the scene menu last picked on each monitor; flags given on the command line win.
+    picked = load_settings().get("menu", {})
+
+    def choice(key):
+        return {k: v for k, v in picked.get(key, {}).items() if k in MENU_KEYS and getattr(args, k, None) is None}
+
+    def page(scene, chat, extra=None):
         chat = "off" if args.no_chat else chat
-        return f"{(HERE / 'index.html').as_uri()}?{urlencode({**query, 'scene': scene, 'chat': chat})}"
+        return f"{(HERE / 'index.html').as_uri()}?{urlencode({**query, **(extra or {}), 'scene': scene, 'chat': chat})}"
 
     if args.window:
         win = Gtk.Window(title="ascii wallpaper")
         win.set_default_size(1280, 720)
-        view = make_view(page(args.scene[0], "full"))
+        view = make_view(page((args.scene or ["koi"])[0], "full"))
         win.add(view)
         views = [view]
         win.connect("destroy", Gtk.main_quit)
@@ -671,17 +709,37 @@ def main():
         chat_on = [display.get_monitor(i) == primary for i in indices]
         if not any(chat_on):
             chat_on[0] = True
-        scenes = [args.scene[n % len(args.scene)] for n in range(len(indices))]
+        extras = [choice(str(i)) for i in indices]
+        if args.scene:
+            scenes = [args.scene[n % len(args.scene)] for n in range(len(indices))]
+        else:
+            scenes = [extra.get("scene") if extra.get("scene") in SCENES else "koi" for extra in extras]
+        n = chat_on.index(True)
+        overlay = None
+
+        def show_chat(scene):
+            """The native chat controls sit over the primary monitor's scene, when it has a chat box."""
+            nonlocal overlay
+            visible = not args.no_chat and scene not in NO_CHAT
+            if overlay:
+                overlay.set_scene(scene, visible)
+            elif visible:
+                overlay = ChatOverlay(display.get_monitor(indices[n]), args.ai, scene in CLOCK_THEMED, args.hour, args.cycle)
+
+        def on_menu(index, primary):
+            def received(values):
+                picked[str(index)] = {k: v for k, v in values.items() if k in MENU_KEYS}
+                save_settings({"menu": picked})
+                if primary and values.get("scene") in SCENES:
+                    show_chat(values["scene"])
+            return received
+
         ponds = [
-            Pond(display.get_monitor(i), page(scene, "glass" if on else "off"))
-            for i, scene, on in zip(indices, scenes, chat_on)
+            Pond(display.get_monitor(i), page(scene, "glass" if on else "off", extra), on_menu(i, on))
+            for i, scene, on, extra in zip(indices, scenes, chat_on, extras)
         ]
         views = [pond.view for pond in ponds]
-        n = chat_on.index(True)
-        if not args.no_chat and scenes[n] not in NO_CHAT:
-            overlay = ChatOverlay(  # noqa: F841
-                display.get_monitor(indices[n]), args.ai, scenes[n] in CLOCK_THEMED, args.hour, args.cycle
-            )
+        show_chat(scenes[n])
 
         # Re-sink now and then, e.g. after the desktop-icons extension restarts.
         def relower():
