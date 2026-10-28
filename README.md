@@ -7,6 +7,8 @@ Inspired by [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks
 |-------|---------------|
 | `koi` | A koi pond that follows the clock (dark at night, milk-white by day). Click to feed the fish. It also has a glass chat box that sends your prompt to Claude or ChatGPT. |
 | `delta` | The DRIC logo on black, with colours that change through the day. A UR5 arm on a rail swaps the letters around; click a letter to swap it yourself. A live CPU/GPU monitor sits in the top-right. |
+| `ocean` | Manta rays and humpback whales over a school of fish, drawn as small 3D bodies. Seen from above (`--view top`) or through the water from below (`--view side`); `--species mix`, `manta` or `whale` (whales bring a calf). Switch from the scene menu or with keys V / S (H shows a small switcher in the top-left). Mantas somersault through plankton you click into the water; whales rise to blow. Follows the clock. |
+| `tank` | A goldfish aquarium: ryukin, oranda, black telescope-eye, ranchu, comet and shubunkin with flowing see-through tails. Click to sprinkle flakes; rest the cursor on the glass and the fish come to look at you. The lamp turns off at night. |
 
 ## Install (Linux)
 
@@ -38,6 +40,7 @@ The system monitor only works with the Linux launcher.
 
 ```sh
 ./wallpaper.py --scene delta        # pick a scene (koi is the default)
+./wallpaper.py --scene ocean --view side --species whale # whales seen through the water
 ./wallpaper.py --scene delta,koi    # one scene per monitor
 ./wallpaper.py --window             # preview in a normal window
 ./wallpaper.py --fps 15             # use less CPU (default 24)

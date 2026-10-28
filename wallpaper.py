@@ -58,9 +58,9 @@ CHAT_W, CHAT_H = 640, 136
 SCENES = sorted(p.stem for p in (HERE / "scenes").glob("*.js"))
 # Scenes whose look follows the clock (they call setTheme by hour); the chat controls
 # follow the same hours. Everything else is dark.
-CLOCK_THEMED = {"koi"}
+CLOCK_THEMED = {"koi", "ocean"}
 # Scenes without a chat box (they return chat: false).
-NO_CHAT = {"delta"}
+NO_CHAT = {"delta", "ocean", "tank"}
 
 
 class XPointer:
@@ -624,6 +624,8 @@ def main():
                         help=f"scene, or a comma list (one per monitor): {', '.join(SCENES)} (default koi)")
     parser.add_argument("--koi", type=int, default=7, help="number of koi (default 7)")
     parser.add_argument("--pads", type=int, default=5, help="number of lily pads (default 5)")
+    parser.add_argument("--view", choices=["top", "side"], help="ocean: look down from above or through the water")
+    parser.add_argument("--species", choices=["mix", "manta", "whale"], help="ocean: which animals (default mix)")
     parser.add_argument("--fps", type=int, default=24, help="frame cap; lower saves CPU (default 24)")
     parser.add_argument("--monitor", type=int, help="only this monitor index")
     parser.add_argument("--hour", type=float, help="pin the time of day (0-24) instead of following the clock")
@@ -643,6 +645,10 @@ def main():
         query["hour"] = args.hour
     if args.cycle:
         query["cycle"] = args.cycle
+    if args.view:
+        query["view"] = args.view
+    if args.species:
+        query["species"] = args.species
 
     def page(scene, chat):
         chat = "off" if args.no_chat else chat
