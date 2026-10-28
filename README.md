@@ -75,4 +75,5 @@ Wallpaper.scene("name", ({ grid }) => ({
 |------|--------------|
 | `grid.js` | The character grid |
 | `shapes.js` | Shape helpers |
+| `solid.js` | Small 3D bodies drawn as ASCII (z-buffer, rims, spine chains); used by ocean and tank |
 | `app.js` | The frame loop and mouse input |
