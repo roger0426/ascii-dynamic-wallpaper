@@ -10,6 +10,7 @@ Inspired by [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks
 | `ocean` | Manta rays and humpback whales over a school of fish, drawn as small 3D bodies. Seen from above (`--view top`) or through the water from below (`--view side`); `--species mix`, `manta` or `whale` (whales bring a calf). Switch from the scene menu or with keys V / S (H shows a small switcher in the top-left). Mantas somersault through plankton you click into the water; whales rise to blow. Follows the clock. |
 | `tank` | A goldfish aquarium: ryukin, oranda, black telescope-eye, ranchu, comet and shubunkin with flowing see-through tails. Click to sprinkle flakes; rest the cursor on the glass and the fish come to look at you. The lamp turns off at night. |
 | `fireflies` | Fireflies over a meadow and a moonlit pond. They start out blinking at random and, over a minute, fall into step until the whole field flashes together (`?sync=60` sets how long). Click to flash a lantern and they answer in a spreading ring. |
+| `microduck` | Little two-legged robot ducks (after Pollen Robotics' Microduck: loaf-shaped head with one camera eye, a flat bill that drops open, black servo neck and legs, chunky two-tone feet) in a playroom, in cream, sky, lavender and graphite. They waddle about, look at you, sit and doze, dance, chat in their own voices, roller-skate (and wipe out, then get back up), carry toys to the basket in their beaks, kick a ball around, recharge at the dock, and sometimes race. Move the cursor and they chase it like a laser dot; rest it on a duck to pet it; click a duck to boop it, anywhere else to drop a toy. `--ducks 4` or `?ducks=4`; open `?scene=microduck&pose=all` to see every colourway from several angles. |
 
 ## Install (Linux)
 
@@ -41,6 +42,7 @@ The system monitor only works with the Linux launcher.
 
 ```sh
 ./wallpaper.py --scene delta        # pick a scene (koi is the default)
+./wallpaper.py --scene microduck --ducks 6 # six robot ducks
 ./wallpaper.py --scene ocean --view side --species whale # whales seen through the water
 ./wallpaper.py --scene delta,koi    # one scene per monitor
 ./wallpaper.py --window             # preview in a normal window

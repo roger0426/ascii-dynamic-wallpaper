@@ -63,7 +63,7 @@ SCENES = sorted(p.stem for p in (HERE / "scenes").glob("*.js"))
 # follow the same hours. Everything else is dark.
 CLOCK_THEMED = {"koi", "ocean"}
 # Scenes without a chat box (they return chat: false).
-NO_CHAT = {"delta", "ocean", "tank", "fireflies"}
+NO_CHAT = {"delta", "ocean", "tank", "fireflies", "microduck"}
 # What the page's scene menu sets (core/menu.js); remembered per monitor.
 MENU_KEYS = {"scene", "view", "species"}
 
@@ -656,6 +656,7 @@ def main():
                         "(default: the last one picked from the scene menu, else koi)")
     parser.add_argument("--koi", type=int, default=7, help="number of koi (default 7)")
     parser.add_argument("--pads", type=int, default=5, help="number of lily pads (default 5)")
+    parser.add_argument("--ducks", type=int, default=4, help="number of microducks (default 4)")
     parser.add_argument("--view", choices=["top", "side"], help="ocean: look down from above or through the water")
     parser.add_argument("--species", choices=["mix", "manta", "whale"], help="ocean: which animals (default mix)")
     parser.add_argument("--fps", type=int, default=24, help="frame cap; lower saves CPU (default 24)")
@@ -672,7 +673,7 @@ def main():
         install(args)
         return
 
-    query = {"koi": args.koi, "pads": args.pads, "fps": args.fps, "ai": args.ai}
+    query = {"koi": args.koi, "pads": args.pads, "ducks": args.ducks, "fps": args.fps, "ai": args.ai}
     if args.hour is not None:
         query["hour"] = args.hour
     if args.cycle:

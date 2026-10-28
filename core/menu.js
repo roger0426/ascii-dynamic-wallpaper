@@ -17,6 +17,7 @@
     { name: "ocean", label: "Mantas & whales", options: { view: ["top", "side"], species: ["mix", "manta", "whale"] } },
     { name: "tank", label: "Goldfish tank" },
     { name: "fireflies", label: "Fireflies" },
+    { name: "microduck", label: "Microducks" },
     { name: "delta", label: "DRIC robotics lab" },
   ];
 
