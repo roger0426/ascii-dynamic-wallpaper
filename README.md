@@ -9,6 +9,7 @@ Inspired by [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks
 | `delta` | The DRIC logo on black, with colours that change through the day. A UR5 arm on a rail swaps the letters around; click a letter to swap it yourself. A live CPU/GPU monitor sits in the top-right. |
 | `ocean` | Manta rays and humpback whales over a school of fish, drawn as small 3D bodies. Seen from above (`--view top`) or through the water from below (`--view side`); `--species mix`, `manta` or `whale` (whales bring a calf). Switch from the scene menu or with keys V / S (H shows a small switcher in the top-left). Mantas somersault through plankton you click into the water; whales rise to blow. Follows the clock. |
 | `tank` | A goldfish aquarium: ryukin, oranda, black telescope-eye, ranchu, comet and shubunkin with flowing see-through tails. Click to sprinkle flakes; rest the cursor on the glass and the fish come to look at you. The lamp turns off at night. |
+| `fireflies` | Fireflies over a meadow and a moonlit pond. They start out blinking at random and, over a minute, fall into step until the whole field flashes together (`?sync=60` sets how long). Click to flash a lantern and they answer in a spreading ring. |
 
 ## Install (Linux)
 

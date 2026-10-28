@@ -60,7 +60,7 @@ SCENES = sorted(p.stem for p in (HERE / "scenes").glob("*.js"))
 # follow the same hours. Everything else is dark.
 CLOCK_THEMED = {"koi", "ocean"}
 # Scenes without a chat box (they return chat: false).
-NO_CHAT = {"delta", "ocean", "tank"}
+NO_CHAT = {"delta", "ocean", "tank", "fireflies"}
 
 
 class XPointer:
