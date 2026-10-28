@@ -19,7 +19,7 @@
  * "dark") tells the chat box which way to style itself; stats.data holds the latest system
  * readings (CPU, memory, GPU) when a host sends them.
  *
- * Common URL params: scene, fps, chat (full | glass | off). A host that sits behind other
+ * Common URL params: scene, fps (default 24), chat (full | glass | off). A host that sits behind other
  * windows can relay the pointer through window.wallpaperInput(x, y, active, clicked), and
  * system readings through window.wallpaperStats(data) (see wallpaper.py's Stats).
  */
@@ -37,7 +37,7 @@
     const v = parseFloat(params.get(name));
     return Number.isFinite(v) ? v : fallback;
   };
-  const FPS = intParam("fps", 60) || 60;
+  const FPS = intParam("fps", 24) || 24;
   const requested = params.get("scene") || "koi";
   const sceneName = /^[a-z0-9-]+$/.test(requested) ? requested : "koi";
   const chatLayer = params.get("chat") || "full";
@@ -74,8 +74,10 @@
     let lastTime = 0, lastDraw = 0, raf = 0;
     function frame(now) {
       raf = requestAnimationFrame(frame);
-      if (now - lastDraw < 1000 / FPS - 2) return;
-      lastDraw = now;
+      // Carry the remainder over, so 24 fps on a 60 Hz display averages 24 (not 20).
+      const interval = 1000 / FPS, since = now - lastDraw;
+      if (since < interval - 2) return;
+      lastDraw = since > interval * 3 ? now : lastDraw + interval;
       const dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
       lastTime = now;
       const t = now / 1000;

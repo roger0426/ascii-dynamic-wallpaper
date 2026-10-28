@@ -52,7 +52,7 @@ To try a scene in a browser, open `index.html?scene=delta`.
 
 - Your desktop icons stay visible and clickable on top of the wallpaper.
 - With Claude, the chat box copies your prompt and pastes it into a new chat for you. It doesn't send it, so you can check it first.
-- Each monitor uses about a third of a CPU core at 1440p. Use `--fps 15` if that's too much.
+- Scenes run at 24 fps by default, in the browser too (`?fps=30` to change it). Each monitor uses about a third of a CPU core at 1440p; use `--fps 15` if that's too much.
 
 ## Adding your own scene
 
