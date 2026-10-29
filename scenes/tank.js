@@ -16,9 +16,10 @@
  * a dim blue light comes on and the fish doze near the bottom.
  *
  * Click to sprinkle flakes: they float, then sink, and the fish chase them up and down.
- * The fish pick at the gravel now and then. A fast cursor startles them.
+ * The fish pick at the gravel now and then. A fast cursor startles them. The tank runs on
+ * past the screen's sides; when a fish swims off one, another swims in, so `fish` stay in view.
  *
- * URL params: fish=7, hour=13.5, cycle=120.
+ * URL params: fish=7 (in view), hour=13.5, cycle=120.
  */
 Wallpaper.scene("tank", (api) => {
   "use strict";
@@ -29,6 +30,8 @@ Wallpaper.scene("tank", (api) => {
   const { Solid, Chain, dot, cross, len, norm, add, rotate, turnToward } = Wallpaper.solid;
 
   const FISH = clamp(intParam("fish", 7), 1, 14);
+  /** Fish waiting out of sight, to swim in when one leaves. */
+  const RESERVE = Math.max(2, Math.ceil(FISH / 3));
   const PIN_HOUR = floatParam("hour", NaN);
   const CYCLE = floatParam("cycle", 0);
 
@@ -97,7 +100,7 @@ Wallpaper.scene("tank", (api) => {
     dotChar = new Array(cols * rows);
     for (let i = 0; i < dotChar.length; i++) dotChar[i] = Math.random() < 0.12 ? ".`'"[(Math.random() * 3) | 0] : "";
     if (!fish.length) {
-      for (let i = 0; i < FISH; i++) spawnFish(VARIETIES[i % VARIETIES.length]);
+      for (let i = 0; i < FISH + RESERVE; i++) spawnFish(VARIETIES[i % VARIETIES.length]).away = i >= FISH;
     }
     for (const f of fish) {
       f.L = fishSize(f.scale);
@@ -158,7 +161,7 @@ Wallpaper.scene("tank", (api) => {
       pos: [rand(W * 0.15, W * 0.85), rand(surfaceY + H * 0.15, gravelY - H * 0.15), rand(D0 * 0.7, D1 * 0.5)],
       f: [rand() > 0.5 ? 1 : -1, 0, rand(-0.3, 0.3)], l: [0, 0, 1], u: [0, -1, 0], bank: 0,
       speed: 0, cruise: rand(0.18, 0.3), phase: rand(0, 10), fin: rand(0, 10), yaw: 0, yawGoal: 0, yawTimer: 0, pitch: 0,
-      state: "cruise", timer: rand(8, 20), gulp: 0, goal: null, turnLag: 0, home: null,
+      state: "cruise", timer: rand(8, 20), gulp: 0, goal: null, turnLag: 0, home: null, away: false, leaving: 0,
     };
     f.f = norm(f.f);
     f.l = norm(cross(UP, f.f));
@@ -166,6 +169,45 @@ Wallpaper.scene("tank", (api) => {
     f.chain = new Chain(NODES, f.L / (NODES - 1));
     f.chain.place(f.pos, f.f);
     fish.push(f);
+    return f;
+  }
+
+  /**
+   * Keep FISH fish in view. One whose middle swims off a side is on its way out (it doesn't
+   * turn back), so a waiting fish comes in from a random side to take its place. (A fish's
+   * pos is its head; the body trails behind along the chain.)
+   */
+  function keepInView() {
+    let showing = 0;
+    for (const f of fish) {
+      if (f.away || f.leaving) continue;
+      const [sx] = screenOf(f.chain.p[NODES >> 1]);
+      if (f.home == null && (sx < 0 || sx > W)) f.leaving = sx < 0 ? -1 : 1;
+      else showing++;
+    }
+    if (showing >= FISH) return;
+    const waiting = fish.filter((f) => f.away);
+    if (waiting.length) enter(waiting[Math.floor(rand(0, waiting.length))]);
+  }
+
+  /** Bring a waiting fish in, head just past one side, at a random height and depth. */
+  function enter(f) {
+    const fromLeft = rand() < 0.5;
+    const d = rand(D0 * 0.7, D1 * 0.5), s = solid.scaleAt(d);
+    const sx = fromLeft ? -f.L * 0.05 : W + f.L * 0.05, sy = rand(surfaceY + H * 0.15, gravelY - H * 0.15);
+    f.pos = [solid.cx + (sx - solid.cx) / s, solid.cy + (sy - solid.cy) / s, d];
+    f.f = norm([fromLeft ? 1 : -1, 0, rand(-0.2, 0.2)]);
+    f.l = norm(cross(UP, f.f));
+    f.u = cross(f.f, f.l);
+    f.bank = f.turnLag = f.yaw = 0;
+    f.speed = f.L * f.cruise;
+    f.state = "cruise";
+    f.timer = rand(8, 20);
+    f.goal = null;
+    f.home = rand(W * 0.2, W * 0.8);
+    f.away = false;
+    f.leaving = 0;
+    f.chain.place(f.pos, f.f);
   }
 
   /** Turn toward `want` (easing in), wander about "up", bank a little and stay upright. */
@@ -196,13 +238,20 @@ Wallpaper.scene("tank", (api) => {
     const [sx, sy] = screenOf(f.pos);
     let want = f.f.slice(), urgency = 0;
 
-    // The tank runs on past the screen's sides: fish swim out of view and head back only
-    // once well out of sight. The surface and the gravel are real, so those still turn them.
+    // The tank runs on past the screen's sides: a fish that swims well out of sight waits
+    // there (see keepInView), unless it's on its way in. The surface and the gravel are
+    // real, so those still turn them.
     const out = L * 1.6;
-    if ((sx < -out || sx > W + out) && f.home == null) f.home = rand(W * 0.2, W * 0.8);
+    if ((sx < -out || sx > W + out) && f.home == null) {
+      f.away = true;
+      return;
+    }
+    if (f.leaving) want[0] += f.leaving * 3;
     if (f.home != null) {
       want[0] += Math.sign(f.home - f.pos[0]) * 3;
-      if (sx > 0 && sx < W) f.home = null;
+      // In once its middle is (see keepInView).
+      const [mx] = screenOf(f.chain.p[NODES >> 1]);
+      if (mx > 0 && mx < W) f.home = null;
     }
     const top = surfaceY + L * (night ? 1.2 : 0.45), bottom = gravelY - L * 0.35;
     if (sy < top) want[1] += clamp((top - sy) / L, 0, 2) * 2;
@@ -211,7 +260,7 @@ Wallpaper.scene("tank", (api) => {
     if (f.pos[2] > D1) want[2] -= ((f.pos[2] - D1) / L) * 2;
 
     for (const o of fish) {
-      if (o === f) continue;
+      if (o === f || o.away) continue;
       const dx = f.pos[0] - o.pos[0], dy = f.pos[1] - o.pos[1], dd = f.pos[2] - o.pos[2];
       const d = Math.hypot(dx, dy, dd), r = (L + o.L) * 0.5;
       if (d > 0 && d < r) want = add(want, [dx / d, dy / d, dd / d], ((r - d) / r) * 1.2);
@@ -314,7 +363,7 @@ Wallpaper.scene("tank", (api) => {
     want = add(want, UP, clamp(climb + f.pitch * 0.3, -cap, cap) - climb);
     steer(f, want, 1.2 + urgency * 1.5, f.yaw * (1 - urgency) * 0.6, dt);
 
-    const target = L * (night ? 0.06 : f.cruise + urgency * 0.6 + (f.state === "forage" ? -0.1 : 0));
+    const target = L * (night ? f.cruise * (2 / 3) : f.cruise + urgency * 0.6 + (f.state === "forage" ? -0.1 : 0));
     f.speed += (target - f.speed) * Math.min(1, dt * 1.5);
     f.phase += dt * (2 + (f.speed / L) * 10);
     f.fin += dt * (night ? 1.5 : 4);
@@ -743,7 +792,8 @@ Wallpaper.scene("tank", (api) => {
       grid.repaintBackdrop();
       skyPainted = now;
     }
-    for (const f of fish) stepFish(f, dt, t);
+    keepInView();
+    for (const f of fish) if (!f.away) stepFish(f, dt, t);
     stepFlakes(dt, t);
     stepBubbles(dt, t);
   }
@@ -758,7 +808,7 @@ Wallpaper.scene("tank", (api) => {
     drawPuffs(dt);
 
     solid.begin();
-    for (const f of fish) drawFish(f, t);
+    for (const f of fish) if (!f.away) drawFish(f, t);
     solid.resolve();
 
     drawPlants(t, true);

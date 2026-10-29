@@ -10,7 +10,9 @@
  * Mantas are a flapping disc (a wave runs out along each wing) that banks into turns and
  * somersaults when it feeds; whales are a tube around a spine that beats up and down, with
  * long white pectoral fins and a fluke that pitches with the stroke. Whales come up to
- * blow now and then. A school of small fish keeps clear of everything bigger.
+ * blow now and then. A school of small fish keeps clear of everything bigger. The sea runs
+ * on past the screen's edges; when a manta or whale swims off one, another swims in, so the
+ * numbers in view stay the same (the school stays on screen).
  *
  * Click to release a plankton bloom: the mantas come and loop through it. Mantas drift
  * toward a resting cursor; the school scatters from a moving one.
@@ -248,7 +250,7 @@ Wallpaper.scene("ocean", (api) => {
       pos: startPos(L), f, l, u: cross(f, l), bank: 0, speed: 0, phase: rand(0, 10),
       cruise: kind === "manta" ? rand(0.26, 0.36) : rand(0.07, 0.09),
       yaw: 0, yawGoal: 0, yawTimer: 0, pitchGoal: 0,
-      state: "cruise", timer: rand(25, 50), loops: 0, ...extra,
+      state: "cruise", timer: rand(25, 50), loops: 0, home: null, away: false, leaving: null, ...extra,
     };
     a.speed = a.cruise * L;
     if (kind === "whale") {
@@ -266,8 +268,10 @@ Wallpaper.scene("ocean", (api) => {
     if (!W) return;
     const mantas = species === "whale" ? 0 : species === "manta" ? Math.max(MANTAS, 5) : MANTAS;
     const whales = species === "manta" ? 0 : species === "whale" ? Math.max(WHALES, 1) : WHALES;
-    for (let i = 0; i < whales; i++) {
-      const mom = makeAnimal("whale", whaleSize() * rand(0.92, 1.05));
+    wanted.manta = mantas;
+    wanted.whale = whales;
+    for (let i = 0; i < whales + reserve(whales); i++) {
+      const mom = makeAnimal("whale", whaleSize() * rand(0.92, 1.05), { away: i >= whales });
       // A whale-only sea gets a calf that keeps to its mother's side.
       if (species === "whale" && i === 0) {
         const calf = makeAnimal("whale", mom.L * 0.42, { mother: mom, cruise: mom.cruise * 1.1 });
@@ -276,8 +280,68 @@ Wallpaper.scene("ocean", (api) => {
         calf.chain.place(calf.pos, calf.f);
       }
     }
-    for (let i = 0; i < mantas; i++) makeAnimal("manta", mantaSize() * rand(0.75, 1.15));
+    for (let i = 0; i < mantas + reserve(mantas); i++) makeAnimal("manta", mantaSize() * rand(0.75, 1.15), { away: i >= mantas });
     spawnFish();
+  }
+
+  /** How many of each kind stay in view; a few more wait out of sight (see keepInView). */
+  const wanted = { manta: 0, whale: 0 };
+  const reserve = (n) => (n ? Math.max(2, Math.ceil(n / 3)) : 0);
+  const onScreen = (sx, sy, inset = 0) =>
+    sx >= inset && sx <= W - inset && (view === "side" || (sy >= inset && sy <= H - inset));
+  /** The middle of the body: a whale's pos is its head, with the spine trailing behind. */
+  const middleOf = (a) => (a.chain ? a.chain.p[a.chain.n >> 1] : a.pos);
+
+  /**
+   * Keep the same number of each kind in view. One whose middle swims off an edge is on its
+   * way out (it doesn't turn back), so a waiting one comes in to take its place. A mother
+   * with a calf turns back instead, so the calf stays by her side; the calf isn't counted.
+   */
+  function keepInView() {
+    const showing = { manta: 0, whale: 0 };
+    for (const a of animals) {
+      if (a.away || a.leaving || a.mother) continue;
+      // A mother turns as her head nears an edge: a whale turns too slowly to wait longer.
+      const mother = animals.some((c) => c.mother === a);
+      const [sx, sy] = screenOf(mother ? a.pos : middleOf(a));
+      if (!a.home && !onScreen(sx, sy, mother ? a.L * 0.35 : 0)) {
+        if (mother) {
+          a.home = [rand(W * 0.2, W * 0.8), view === "side" ? rand(surfaceY + H * 0.2, bedY - H * 0.15) : rand(H * 0.2, H * 0.8)];
+          showing[a.kind]++;
+        } else a.leaving = [sx < 0 ? -1 : sx > W ? 1 : 0, view === "top" ? (sy < 0 ? -1 : sy > H ? 1 : 0) : 0];
+      } else showing[a.kind]++;
+    }
+    for (const kind of ["manta", "whale"]) {
+      if (showing[kind] >= wanted[kind]) continue;
+      const waiting = animals.filter((a) => a.away && a.kind === kind && !a.mother);
+      if (waiting.length) enter(waiting[Math.floor(rand(0, waiting.length))]);
+    }
+  }
+
+  /**
+   * Bring a waiting animal in from just past an edge (any edge from above), heading in: a
+   * manta just out of sight, a whale with its head at the edge (its body trails behind).
+   */
+  function enter(a) {
+    const L = a.L, d = rand(D0 * 0.7, D1 * 0.5), s = solid.scaleAt(d);
+    const y0 = view === "side" ? surfaceY + L * 0.4 : L * 0.4;
+    const edge = view === "top" ? Math.floor(rand(0, 4)) : rand() < 0.5 ? 0 : 1;
+    const o = a.chain ? L * 0.05 : L * 0.6;
+    const sx = edge === 0 ? -o : edge === 1 ? W + o : rand(L * 0.6, W - L * 0.6);
+    const sy = edge === 2 ? -o : edge === 3 ? H + o : rand(y0, H - L * 0.4);
+    a.home = [rand(W * 0.2, W * 0.8), view === "side" ? rand(surfaceY + H * 0.2, bedY - H * 0.15) : rand(H * 0.2, H * 0.8)];
+    a.pos = [solid.cx + (sx - solid.cx) / s, solid.cy + (sy - solid.cy) / s, d];
+    a.f = view === "top" ? norm([a.home[0] - sx, a.home[1] - sy, 0]) : norm([edge === 0 ? 1 : -1, 0, rand(-0.15, 0.15)]);
+    a.l = norm(cross(UP, a.f));
+    a.u = cross(a.f, a.l);
+    a.bank = a.yaw = 0;
+    a.speed = a.cruise * L;
+    a.state = "cruise";
+    a.timer = rand(25, 50);
+    a.loops = 0;
+    a.away = false;
+    a.leaving = null;
+    if (a.chain) a.chain.place(a.pos, a.f);
   }
 
   /**
@@ -324,18 +388,23 @@ Wallpaper.scene("ocean", (api) => {
     let want = a.f.slice();
     let urgency = 0;
 
-    // The screen's edges aren't walls: animals swim out of view, and only once well out
-    // of sight do they head back toward a spot on screen. The surface and the seabed of
-    // the side view are real, so those still turn them.
+    // The screen's edges aren't walls: an animal that swims well out of sight waits there
+    // (see keepInView), unless it's on its way in. A calf only follows its mother, who
+    // never leaves. The surface and the seabed of the side view are real, so those still
+    // turn them.
     const m = a.kind === "whale" ? L * 0.15 : L * 0.7;
     const out = L * 1.2;
     const gone = sx < -out || sx > W + out || (view === "top" && (sy < -out || sy > H + out));
-    if (gone && !a.home) {
-      a.home = [rand(W * 0.2, W * 0.8), view === "side" ? rand(surfaceY + H * 0.2, bedY - H * 0.15) : rand(H * 0.2, H * 0.8)];
+    if (gone && !a.home && !a.mother) {
+      a.away = true;
+      return;
     }
+    if (a.leaving) want = add(want, [a.leaving[0], a.leaving[1], 0], 3);
     if (a.home) {
       want = add(want, norm([a.home[0] - a.pos[0], a.home[1] - a.pos[1], 0]), 3);
-      if (sx > 0 && sx < W && (view === "side" || (sy > 0 && sy < H))) a.home = null;
+      // In once its middle is (see keepInView).
+      const [mx, my] = screenOf(middleOf(a));
+      if (mx > 0 && mx < W && (view === "side" || (my > 0 && my < H))) a.home = null;
     }
     if (view === "side") {
       const top = surfaceY + (a.kind === "whale" ? L * 0.08 : L * 0.9);
@@ -349,7 +418,7 @@ Wallpaper.scene("ocean", (api) => {
 
     // Personal space.
     for (const o of animals) {
-      if (o === a || o === a.mother || o.mother === a) continue;
+      if (o === a || o.away || o === a.mother || o.mother === a) continue;
       const dx = a.pos[0] - o.pos[0], dy = a.pos[1] - o.pos[1], dd = a.pos[2] - o.pos[2];
       const d = Math.hypot(dx, dy, dd), r = (a.L + o.L) * 0.45;
       if (d > 0 && d < r) {
@@ -841,6 +910,7 @@ Wallpaper.scene("ocean", (api) => {
   function stepFish(dt, t) {
     const R = 70, sep = 26, maxV = 95, flee = [];
     for (const a of animals) {
+      if (a.away) continue;
       const [x, y] = screenOf(a.pos);
       flee.push([x, y, a.kind === "whale" ? a.L * 0.5 : a.L * 0.9]);
     }
@@ -877,16 +947,16 @@ Wallpaper.scene("ocean", (api) => {
           scared = true;
         }
       }
-      // Free to stream off screen; pulled back only from well outside it.
-      const m = 60, out = 160;
-      if (f.x < -out) ax += (-out - f.x) * 2;
-      if (f.x > W + out) ax -= (f.x - (W + out)) * 2;
+      // Soft walls just inside the edges keep the whole school in view.
+      const m = 60;
+      if (f.x < m) ax += (m - f.x) * 4;
+      if (f.x > W - m) ax -= (f.x - (W - m)) * 4;
       if (view === "side") {
         if (f.y < top + m) ay += (top + m - f.y) * 4;
         if (f.y > bottom - m) ay -= (f.y - (bottom - m)) * 4;
       } else {
-        if (f.y < -out) ay += (-out - f.y) * 2;
-        if (f.y > H + out) ay -= (f.y - (H + out)) * 2;
+        if (f.y < m) ay += (m - f.y) * 4;
+        if (f.y > H - m) ay -= (f.y - (H - m)) * 4;
       }
       const before = Math.sign(f.vx);
       f.vx += ax * dt;
@@ -899,8 +969,9 @@ Wallpaper.scene("ocean", (api) => {
         f.vx *= 30 / (v || 1);
         f.vy *= 30 / (v || 1);
       }
-      f.x += f.vx * dt;
-      f.y += f.vy * dt;
+      // Fleeing a whale can push harder than the walls; the edge still stops them.
+      f.x = clamp(f.x + f.vx * dt, 2, W - 2);
+      f.y = clamp(f.y + f.vy * dt, 2, H - 2);
       // Silver flashes as a fish turns side-on to the light.
       if (Math.sign(f.vx) !== before) f.glint = 1;
       f.glint = Math.max(0, f.glint - dt * 2.5);
@@ -1090,7 +1161,8 @@ Wallpaper.scene("ocean", (api) => {
       grid.repaintBackdrop();
       skyPainted = now;
     }
-    for (const a of animals) stepAnimal(a, dt, t);
+    keepInView();
+    for (const a of animals) if (!a.away) stepAnimal(a, dt, t);
     stepFish(dt, t);
     stepSpouts(dt);
     diffuseEnergy();
@@ -1119,6 +1191,7 @@ Wallpaper.scene("ocean", (api) => {
 
     solid.begin();
     for (const a of animals) {
+      if (a.away) continue;
       if (a.kind === "manta") drawManta(a);
       else drawWhale(a);
     }
