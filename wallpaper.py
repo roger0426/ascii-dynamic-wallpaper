@@ -66,6 +66,9 @@ CLOCK_THEMED = {"koi", "ocean"}
 NO_CHAT = {"delta", "ocean", "tank", "fireflies", "microduck"}
 # What the page's scene menu sets (core/menu.js); remembered per monitor.
 MENU_KEYS = {"scene", "view", "species"}
+# A monitor this much covered by windows pauses its scene; this much slows it to SLOW_FPS.
+COVERED_PAUSE, COVERED_SLOW, SLOW_FPS = 0.95, 0.7, 5
+COVERAGE_MS = 500
 
 
 class XPointer:
@@ -135,6 +138,147 @@ class XPointer:
             self.is_desktop_cache.clear()
         self.is_desktop_cache[window] = result
         return result
+
+
+class Coverage:
+    """Where the open app windows are, from the window manager's stacking list (EWMH).
+
+    Minimized windows, windows on other workspaces, and desktop or keep-below windows
+    (the wallpaper itself, desktop icons, the chat controls) don't count.
+    """
+
+    ALL_WORKSPACES = 0xFFFFFFFF
+
+    def __init__(self):
+        c = ctypes
+        x11 = c.cdll.LoadLibrary(c.util.find_library("X11"))
+        x11.XOpenDisplay.restype = c.c_void_p
+        x11.XOpenDisplay.argtypes = [c.c_char_p]
+        x11.XDefaultRootWindow.restype = c.c_ulong
+        x11.XDefaultRootWindow.argtypes = [c.c_void_p]
+        x11.XInternAtom.restype = c.c_ulong
+        x11.XInternAtom.argtypes = [c.c_void_p, c.c_char_p, c.c_int]
+        x11.XGetWindowProperty.argtypes = [
+            c.c_void_p, c.c_ulong, c.c_ulong, c.c_long, c.c_long, c.c_int, c.c_ulong,
+            c.POINTER(c.c_ulong), c.POINTER(c.c_int), c.POINTER(c.c_ulong), c.POINTER(c.c_ulong),
+            c.POINTER(c.POINTER(c.c_ubyte)),
+        ]
+        x11.XGetGeometry.argtypes = [c.c_void_p, c.c_ulong, c.POINTER(c.c_ulong)] + [c.POINTER(c.c_int)] * 2 + [
+            c.POINTER(c.c_uint)
+        ] * 4
+        x11.XTranslateCoordinates.argtypes = [c.c_void_p, c.c_ulong, c.c_ulong, c.c_int, c.c_int] + [
+            c.POINTER(c.c_int)
+        ] * 2 + [c.POINTER(c.c_ulong)]
+        x11.XFree.argtypes = [c.c_void_p]
+        self.x11 = x11
+        self.dpy = x11.XOpenDisplay(None)
+        if not self.dpy:
+            raise RuntimeError("cannot open X display")
+        self.root = x11.XDefaultRootWindow(self.dpy)
+
+        def atom(name):
+            return x11.XInternAtom(self.dpy, name.encode(), False)
+
+        self.stacking = atom("_NET_CLIENT_LIST_STACKING")
+        self.current_workspace = atom("_NET_CURRENT_DESKTOP")
+        self.workspace = atom("_NET_WM_DESKTOP")
+        self.type_atom = atom("_NET_WM_WINDOW_TYPE")
+        self.app_types = {atom("_NET_WM_WINDOW_TYPE_NORMAL"), atom("_NET_WM_WINDOW_TYPE_DIALOG")}
+        self.state = atom("_NET_WM_STATE")
+        self.skip_states = {atom("_NET_WM_STATE_HIDDEN"), atom("_NET_WM_STATE_BELOW")}
+        self.fullscreen = atom("_NET_WM_STATE_FULLSCREEN")
+        self.maximized = {atom("_NET_WM_STATE_MAXIMIZED_VERT"), atom("_NET_WM_STATE_MAXIMIZED_HORZ")}
+        self.frame_extents = atom("_NET_FRAME_EXTENTS")  # the window manager's title bar and borders
+        self.gtk_frame_extents = atom("_GTK_FRAME_EXTENTS")  # client-side shadows, drawn inside the window
+
+    def _property(self, window, atom, length=1024):
+        """A 32-bit property as a list, or [] when it isn't set (or the window is gone)."""
+        c = ctypes
+        actual_type, actual_format = c.c_ulong(), c.c_int()
+        nitems, after = c.c_ulong(), c.c_ulong()
+        prop = c.POINTER(c.c_ubyte)()
+        status = self.x11.XGetWindowProperty(
+            self.dpy, window, atom, 0, length, False, 0,
+            c.byref(actual_type), c.byref(actual_format), c.byref(nitems), c.byref(after), c.byref(prop),
+        )
+        if status != 0 or not prop:
+            return []
+        data = []
+        if actual_format.value == 32:
+            data = [c.cast(prop, c.POINTER(c.c_ulong))[i] for i in range(nitems.value)]
+        self.x11.XFree(prop)
+        return data
+
+    def _rect(self, window):
+        """(x0, y0, x1, y1) of the window's visible frame in screen pixels, or None."""
+        c = ctypes
+        root, x, y = c.c_ulong(), c.c_int(), c.c_int()
+        w, h, border, depth = c.c_uint(), c.c_uint(), c.c_uint(), c.c_uint()
+        if not self.x11.XGetGeometry(self.dpy, window, c.byref(root), c.byref(x), c.byref(y),
+                                     c.byref(w), c.byref(h), c.byref(border), c.byref(depth)):
+            return None
+        child = c.c_ulong()
+        if not self.x11.XTranslateCoordinates(self.dpy, window, self.root, 0, 0, c.byref(x), c.byref(y), c.byref(child)):
+            return None
+        x0, y0, x1, y1 = x.value, y.value, x.value + w.value, y.value + h.value
+        frame = self._property(window, self.frame_extents, 4)
+        if len(frame) == 4:
+            x0, x1, y0, y1 = x0 - frame[0], x1 + frame[1], y0 - frame[2], y1 + frame[3]
+        shadow = self._property(window, self.gtk_frame_extents, 4)
+        if len(shadow) == 4:
+            x0, x1, y0, y1 = x0 + shadow[0], x1 - shadow[1], y0 + shadow[2], y1 - shadow[3]
+        return (x0, y0, x1, y1) if x0 < x1 and y0 < y1 else None
+
+    def windows(self):
+        """The visible app windows, as (rect, fills its monitor) with rect = (x0, y0, x1, y1).
+
+        A maximized window leaves the top bar and dock showing, so it is flagged as filling
+        the monitor instead of being measured.
+        """
+        current = self._property(self.root, self.current_workspace, 1)
+        windows = []
+        for window in self._property(self.root, self.stacking):
+            types = self._property(window, self.type_atom, 16)
+            if types and not self.app_types.intersection(types):
+                continue
+            states = set(self._property(window, self.state, 32))
+            if self.skip_states & states:
+                continue
+            workspace = self._property(window, self.workspace, 1)
+            if workspace and current and workspace[0] not in (self.ALL_WORKSPACES, current[0]):
+                continue
+            rect = self._rect(window)
+            if rect:
+                windows.append((rect, self.fullscreen in states or self.maximized <= states))
+        return windows
+
+    @staticmethod
+    def fraction(windows, area):
+        """How much of area (x0, y0, x1, y1) the windows cover, 0 to 1."""
+        ax0, ay0, ax1, ay1 = area
+        for (x0, y0, x1, y1), fills in windows:
+            if fills and ax0 <= (x0 + x1) / 2 < ax1 and ay0 <= (y0 + y1) / 2 < ay1:
+                return 1.0
+        rects = [rect for rect, _ in windows]
+        clipped = [
+            (max(x0, ax0), max(y0, ay0), min(x1, ax1), min(y1, ay1)) for x0, y0, x1, y1 in rects
+        ]
+        clipped = [r for r in clipped if r[0] < r[2] and r[1] < r[3]]
+        if not clipped:
+            return 0.0
+        # Sweep across the distinct x edges; in each strip, merge the covered y spans.
+        xs = sorted({x for r in clipped for x in (r[0], r[2])})
+        covered = 0
+        for xa, xb in zip(xs, xs[1:]):
+            spans = sorted((r[1], r[3]) for r in clipped if r[0] <= xa and r[2] >= xb)
+            length, end = 0, None
+            for y0, y1 in spans:
+                if end is None or y0 >= end:
+                    length, end = length + y1 - y0, y1
+                elif y1 > end:
+                    length, end = length + y1 - end, y1
+            covered += (xb - xa) * length
+        return covered / ((ax1 - ax0) * (ay1 - ay0))
 
 
 class ClaudePaster:
@@ -368,6 +512,9 @@ class Pond:
         self.scale = monitor.get_scale_factor()
         self.view = make_view(uri, on_message)
         self.sent = None
+        self.throttled = None
+        # A reloaded page (the scene menu switches scenes that way) starts at full speed again.
+        self.view.connect("load-changed", self.on_load)
 
         g = self.geometry
         self.win = win = Gtk.Window()
@@ -390,6 +537,23 @@ class Pond:
         gdk_window = self.win.get_window()
         if gdk_window:
             gdk_window.lower()
+
+    def on_load(self, _view, event):
+        if event == WebKit2.LoadEvent.COMMITTED:
+            self.throttled = None
+
+    def screen_area(self):
+        """The monitor in screen pixels, as (x0, y0, x1, y1)."""
+        g, s = self.geometry, self.scale
+        return g.x * s, g.y * s, (g.x + g.width) * s, (g.y + g.height) * s
+
+    def throttle(self, covered):
+        """Slow or pause the scene while windows cover this much (0 to 1) of the monitor."""
+        fps = 0 if covered >= COVERED_PAUSE else SLOW_FPS if covered >= COVERED_SLOW else None
+        if fps == self.throttled:
+            return
+        self.throttled = fps
+        run_js(self.view, f"window.wallpaperThrottle && wallpaperThrottle({'null' if fps is None else fps})")
 
     def relay(self, x, y, over_desktop, clicked):
         g = self.geometry
@@ -763,6 +927,16 @@ def main():
             return True
 
         GLib.timeout_add(POLL_MS, poll)
+
+        coverage = Coverage()
+
+        def throttle():
+            windows = coverage.windows()
+            for pond in ponds:
+                pond.throttle(Coverage.fraction(windows, pond.screen_area()))
+            return True
+
+        GLib.timeout_add(COVERAGE_MS, throttle)
 
     stats = Stats()
 

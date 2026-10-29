@@ -63,6 +63,7 @@ Click `≡` in the bottom-right corner to switch scenes (and options such as oce
 - Your desktop icons stay visible and clickable on top of the wallpaper.
 - With Claude, the chat box copies your prompt and pastes it into a new chat for you. It doesn't send it, so you can check it first.
 - Scenes run at 24 fps by default, in the browser too (`?fps=30` to change it). Each monitor uses about a third of a CPU core at 1440p; use `--fps 15` if that's too much.
+- With `wallpaper.py`, a monitor that's at least 70% covered by windows drops to 5 fps, and one with a maximized or fullscreen window (or 95% covered) pauses until it shows again. Minimized windows and other workspaces don't count.
 
 ## Adding your own scene
 

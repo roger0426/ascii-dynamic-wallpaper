@@ -22,7 +22,9 @@
  * Common URL params: scene, fps (default 24), chat (full | glass | off), menu (0 hides the
  * scene menu). A host that sits behind other
  * windows can relay the pointer through window.wallpaperInput(x, y, active, clicked), and
- * system readings through window.wallpaperStats(data) (see wallpaper.py's Stats).
+ * system readings through window.wallpaperStats(data) (see wallpaper.py's Stats). While
+ * windows cover most of the screen it can slow the scene with window.wallpaperThrottle(fps),
+ * or pause it with 0; wallpaperThrottle(null) gives back the full frame rate.
  */
 (() => {
   "use strict";
@@ -48,6 +50,13 @@
   };
   setTheme("dark");
 
+  // Defined before the scene loads, so a host can call it as soon as the page is up.
+  let throttle = null, onThrottle = () => {};
+  window.wallpaperThrottle = (fps) => {
+    throttle = Number.isFinite(fps) && fps >= 0 ? fps : null;
+    onThrottle();
+  };
+
   Wallpaper.scene = (name, factory) => {
     if (name === sceneName) boot(factory);
   };
@@ -72,21 +81,38 @@
       grid.setBackdrop(scene.paintBackdrop ? (g, w, h) => scene.paintBackdrop(g, w, h) : null);
     }
 
+    const fps = () => (throttle === null ? FPS : Math.min(FPS, throttle));
     let lastTime = 0, lastDraw = 0, raf = 0;
+    // requestAnimationFrame, not setTimeout: WebKit throttles timers on a page it thinks is
+    // idle (a wallpaper never has focus), which starved the scene of frames.
+    function schedule() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      if (document.hidden || fps() <= 0) {
+        lastTime = 0;
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    }
     function frame(now) {
       raf = requestAnimationFrame(frame);
       // Carry the remainder over, so 24 fps on a 60 Hz display averages 24 (not 20).
-      const interval = 1000 / FPS, since = now - lastDraw;
+      const interval = 1000 / fps(), since = now - lastDraw;
       if (since < interval - 2) return;
       lastDraw = since > interval * 3 ? now : lastDraw + interval;
-      const dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
+      // A slowed scene's longer frames are split into equal steps of at most 50 ms.
+      const dt = lastTime ? Math.min(0.25, (now - lastTime) / 1000) : 0.05;
       lastTime = now;
       const t = now / 1000;
-      if (scene.step) scene.step(dt, t);
+      if (scene.step) {
+        const n = Math.max(1, Math.ceil(dt / 0.05 - 1e-6));
+        for (let k = 0; k < n; k++) scene.step(dt / n, t);
+      }
       grid.clear();
       scene.draw(t, dt);
       grid.flush();
     }
+    onThrottle = schedule;
 
     function movePointer(x, y) {
       const moved = Math.hypot(x - pointer.x, y - pointer.y);
@@ -126,16 +152,10 @@
     };
 
     window.addEventListener("resize", resize);
-    document.addEventListener("visibilitychange", () => {
-      cancelAnimationFrame(raf);
-      if (!document.hidden) {
-        lastTime = 0;
-        raf = requestAnimationFrame(frame);
-      }
-    });
+    document.addEventListener("visibilitychange", schedule);
 
     resize();
-    raf = requestAnimationFrame(frame);
+    schedule();
   }
 
   const script = document.createElement("script");
