@@ -7,6 +7,8 @@ Inspired by [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks
 |-------|---------------|
 | `koi` | A koi pond that follows the clock (dark at night, milk-white by day). Click to feed the fish. It also has a glass chat box that sends your prompt to Claude or ChatGPT. |
 | `delta` | The DRIC logo on black, with colours that change through the day. A UR5 arm on a rail swaps the letters around; click a letter to swap it yourself. A live CPU/GPU monitor sits in the top-right. |
+| `cats` | Playful ASCII cats across 3 selectable scenes (Living Room, Rooftop, Garden). Configure the number of cats (`--cats 3` or `?cats=3`), play with laser pointer and toys (yarn ball, wind-up mouse, treats), pet them to make them purr, and watch them leave paw prints on your desktop. Cats are drawn at koi scale with 22 poses (loaf, lying on the side, curled asleep, grooming, stretching, belly-up…); open `?scene=cats&pose=all` to see them all. No chat box. |
+| `shore` | The koi pond and its grassy bank, all seen from above, with stones, reeds and cats (`--cats 3`). The cats watch koi that swim up to the bank, creep after them and swat at the water; the koi scatter, and sometimes one splashes the cat back. Cats also come to the edge to drink. Click the water to feed the koi (they crowd the bank, and the cats notice), click the bank to call a cat, rest the cursor on a cat to pet it. |
 | `ocean` | Manta rays and humpback whales over a school of fish, drawn as small 3D bodies. Seen from above (`--view top`) or through the water from below (`--view side`); `--species mix`, `manta` or `whale` (whales bring a calf). Switch from the scene menu or with keys V / S (H shows a small switcher in the top-left). Mantas somersault through plankton you click into the water; whales rise to blow. Follows the clock. |
 | `tank` | A goldfish aquarium: ryukin, oranda, black telescope-eye, ranchu, comet and shubunkin with flowing see-through tails. Click to sprinkle flakes; rest the cursor on the glass and the fish come to look at you. The lamp turns off at night. |
 | `fireflies` | Fireflies over a meadow and a moonlit pond. They start out blinking at random and, over a minute, fall into step until the whole field flashes together (`?sync=60` sets how long). Click to flash a lantern and they answer in a spreading ring. |
@@ -41,7 +43,9 @@ The system monitor only works with the Linux launcher.
 ## Options
 
 ```sh
-./wallpaper.py --scene delta        # pick a scene (koi is the default)
+./wallpaper.py --scene cats         # cats scene (or delta, koi, shore, ocean, tank, fireflies)
+./wallpaper.py --scene shore --cats 2 # koi pond with 2 cats on the bank
+./wallpaper.py --scene cats --cats 5 --env room # 5 cats in living room (or roof, garden)
 ./wallpaper.py --scene microduck --ducks 6 # six robot ducks
 ./wallpaper.py --scene ocean --view side --species whale # whales seen through the water
 ./wallpaper.py --scene delta,koi    # one scene per monitor
@@ -56,7 +60,7 @@ To try a scene in a browser, open `index.html?scene=delta`.
 
 ### Scene menu
 
-Click `≡` in the bottom-right corner to switch scenes (and options such as ocean's view and animals). With `wallpaper.py`, each monitor remembers what you last picked and starts on it next time, unless you pass `--scene`. Add `?menu=0` to hide the button.
+Click `≡` in the bottom-right corner to switch scenes (and options such as ocean's view and animals, or the cats' room). With `wallpaper.py`, each monitor remembers what you last picked and starts on it next time, unless you pass `--scene`. Add `?menu=0` to hide the button.
 
 ## Good to know
 

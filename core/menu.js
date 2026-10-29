@@ -1,6 +1,6 @@
 /**
  * The scene menu: a small button in the bottom-right corner that opens a list of scenes,
- * with the current scene's options (ocean's view and animals) underneath.
+ * with the current scene's options (ocean's view and animals, the cats' room) underneath.
  *
  * Picking one reloads the page with the new ?scene= (other params kept). Inside
  * wallpaper.py the page also posts the choice to the host (so it can remember it and
@@ -14,6 +14,8 @@
   /** Every scene the menu offers. A new scene shows up here once it's listed. */
   const SCENES = [
     { name: "koi", label: "Koi pond" },
+    { name: "shore", label: "Koi & cats on the bank" },
+    { name: "cats", label: "Cats at play", options: { env: ["room", "roof", "garden"] } },
     { name: "ocean", label: "Mantas & whales", options: { view: ["top", "side"], species: ["mix", "manta", "whale"] } },
     { name: "tank", label: "Goldfish tank" },
     { name: "fireflies", label: "Fireflies" },

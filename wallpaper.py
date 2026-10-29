@@ -61,11 +61,11 @@ CHAT_W, CHAT_H = 640, 136
 SCENES = sorted(p.stem for p in (HERE / "scenes").glob("*.js"))
 # Scenes whose look follows the clock (they call setTheme by hour); the chat controls
 # follow the same hours. Everything else is dark.
-CLOCK_THEMED = {"koi", "ocean"}
+CLOCK_THEMED = {"koi", "cats", "cat", "shore", "ocean"}
 # Scenes without a chat box (they return chat: false).
-NO_CHAT = {"delta", "ocean", "tank", "fireflies", "microduck"}
+NO_CHAT = {"delta", "cats", "ocean", "tank", "fireflies", "microduck"}
 # What the page's scene menu sets (core/menu.js); remembered per monitor.
-MENU_KEYS = {"scene", "view", "species"}
+MENU_KEYS = {"scene", "view", "species", "env"}
 # A monitor this much covered by windows pauses its scene; this much slows it to SLOW_FPS.
 COVERED_PAUSE, COVERED_SLOW, SLOW_FPS = 0.95, 0.7, 5
 COVERAGE_MS = 500
@@ -820,7 +820,10 @@ def main():
                         "(default: the last one picked from the scene menu, else koi)")
     parser.add_argument("--koi", type=int, default=7, help="number of koi (default 7)")
     parser.add_argument("--pads", type=int, default=5, help="number of lily pads (default 5)")
+    parser.add_argument("--cats", type=int, default=3, help="number of cats in the cats and shore scenes (default 3)")
     parser.add_argument("--ducks", type=int, default=4, help="number of microducks (default 4)")
+    parser.add_argument("--env", choices=["room", "roof", "garden"],
+                        help="cats scene environment: room, roof, garden (default room)")
     parser.add_argument("--view", choices=["top", "side"], help="ocean: look down from above or through the water")
     parser.add_argument("--species", choices=["mix", "manta", "whale"], help="ocean: which animals (default mix)")
     parser.add_argument("--fps", type=int, default=24, help="frame cap; lower saves CPU (default 24)")
@@ -837,7 +840,9 @@ def main():
         install(args)
         return
 
-    query = {"koi": args.koi, "pads": args.pads, "ducks": args.ducks, "fps": args.fps, "ai": args.ai}
+    query = {"koi": args.koi, "pads": args.pads, "cats": args.cats, "ducks": args.ducks, "fps": args.fps, "ai": args.ai}
+    if args.env:
+        query["env"] = args.env
     if args.hour is not None:
         query["hour"] = args.hour
     if args.cycle:
